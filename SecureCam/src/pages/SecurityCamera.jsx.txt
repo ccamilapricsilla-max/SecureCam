@@ -1,0 +1,109 @@
+import React, { useState, useRef } from 'react';
+import { Helmet } from 'react-helmet';
+import { Video, Activity } from 'lucide-react';
+import VideoPlayer from '@/components/VideoPlayer';
+import VideoControls from '@/components/VideoControls';
+import MotionHistory from '@/components/MotionHistory';
+import MotionRecorder from '@/components/MotionRecorder';
+const SecurityCamera = () => {
+  const videoRef = useRef(null);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [videoFilename, setVideoFilename] = useState('');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const handleVideoLoad = () => {
+    setVideoLoaded(true);
+  };
+  const handleMotionSaved = () => {
+    // Trigger refresh of motion history
+    setRefreshTrigger(prev => prev + 1);
+  };
+
+  // Check if video is playing
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleEnded = () => setIsPlaying(false);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('ended', handleEnded);
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('ended', handleEnded);
+    };
+  }, [videoLoaded]);
+  return <>
+      <Helmet>
+        <title>Security Camera - Motion Detection System</title>
+        <meta name="description" content="Professional security camera system with real-time motion detection, video playback, and motion event tracking." />
+      </Helmet>
+
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black">
+        {/* Header */}
+        <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-40">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
+                  <Video className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-white">SecureCam</h1>
+                  <p className="text-xs text-gray-400">Tu seguridad es nuestra prioridad</p>
+                </div>
+              </div>
+              
+              {/* Status Indicator */}
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-red-500 animate-pulse' : 'bg-gray-600'}`} />
+                <span className={`text-sm font-medium ${isPlaying ? 'text-red-400' : 'text-gray-500'}`}>
+                  {isPlaying ? 'LIVE' : 'IDLE'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="container mx-auto px-4 py-6">
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Left Column - Video Player & Controls */}
+            <div className="flex-1 lg:w-[60%] space-y-4">
+              {/* Video Player */}
+              <VideoPlayer videoRef={videoRef} onVideoLoad={handleVideoLoad} videoFilename={videoFilename} setVideoFilename={setVideoFilename} />
+              
+              {/* Video Controls */}
+              {videoLoaded && <VideoControls videoRef={videoRef} />}
+
+              {/* Info Card */}
+              {!videoLoaded && <div className="bg-gradient-to-r from-purple-600/10 to-pink-600/10 border border-purple-600/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Activity className="w-5 h-5 text-purple-400 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-1">
+                        Motion Detection Ready
+                      </h3>
+                      <p className="text-xs text-gray-400">
+                        Upload a video to begin monitoring. The system will automatically detect and record motion events.
+                      </p>
+                    </div>
+                  </div>
+                </div>}
+            </div>
+
+            {/* Right Column - Motion History */}
+            <div className="flex-1 lg:w-[40%] lg:min-h-[600px]">
+              <MotionHistory refreshTrigger={refreshTrigger} />
+            </div>
+          </div>
+        </main>
+
+        {/* Motion Recorder Component (Invisible but functional) */}
+        <MotionRecorder videoRef={videoRef} enabled={videoLoaded && isPlaying} videoFilename={videoFilename} onMotionSaved={handleMotionSaved} />
+      </div>
+    </>;
+};
+export default SecurityCamera;

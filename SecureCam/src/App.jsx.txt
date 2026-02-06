@@ -1,0 +1,47 @@
+import React, { useEffect } from 'react';
+import { Route, Routes, BrowserRouter as Router } from 'react-router-dom';
+import ScrollToTop from './components/ScrollToTop';
+import { CameraProvider } from './context/CameraContext';
+import Navigation from './components/Navigation';
+import HomePage from './pages/HomePage';
+import LivePage from './pages/LivePage';
+import SettingsPage from './pages/SettingsPage';
+import MotionLog from './pages/MotionLog';
+
+function App() {
+  // Initialization logic for storage
+  useEffect(() => {
+    // Check local storage health on mount
+    try {
+      const storageKey = 'securecam_videos';
+      const rawData = localStorage.getItem(storageKey);
+      if (rawData) {
+        const data = JSON.parse(rawData);
+        const count = Object.keys(data).length;
+        console.log(`[App Init] Video Storage initialized: ${count} videos found.`);
+      } else {
+        console.log('[App Init] Video Storage is empty.');
+      }
+    } catch (e) {
+      console.error('[App Init] Storage corruption detected, resetting...', e);
+      localStorage.removeItem('securecam_videos');
+    }
+  }, []);
+
+  return (
+    <CameraProvider>
+      <Router>
+        <ScrollToTop />
+        <Navigation />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/live" element={<LivePage />} />
+          <Route path="/motion-log" element={<MotionLog />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
+      </Router>
+    </CameraProvider>
+  );
+}
+
+export default App;

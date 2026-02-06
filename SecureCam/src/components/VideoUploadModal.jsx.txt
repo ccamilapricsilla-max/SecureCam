@@ -1,0 +1,215 @@
+import React, { useState, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Upload, FileVideo, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { generateVideoThumbnail } from '@/lib/videoThumbnailGenerator';
+import { cn } from '@/lib/utils';
+import { useCameraContext } from '@/context/CameraContext';
+
+const VideoUploadModal = ({ isOpen, onClose, cameraId, onUploadSuccess }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [file, setFile] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [previewThumbnail, setPreviewThumbnail] = useState(null);
+  const fileInputRef = useRef(null);
+  
+  const { videoStorage } = useCameraContext();
+  const { toast } = useToast();
+
+  const resetState = () => {
+    setFile(null);
+    setError(null);
+    setPreviewThumbnail(null);
+    setIsLoading(false);
+  };
+
+  const handleClose = () => {
+    resetState();
+    onClose();
+  };
+
+  const processFile = async (selectedFile) => {
+    if (!selectedFile) return;
+    
+    // Size check (e.g. 4MB limit to be safe with localStorage)
+    if (selectedFile.size > 4 * 1024 * 1024) {
+      setError("El archivo es demasiado grande (>4MB) para el almacenamiento local.");
+      return;
+    }
+
+    if (!selectedFile.type.startsWith('video/')) {
+      setError("Formato inválido. Por favor sube un video.");
+      return;
+    }
+
+    setFile(selectedFile);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await generateVideoThumbnail(selectedFile);
+      setPreviewThumbnail(data.thumbnail);
+      // We read file as DataURL inside generateVideoThumbnail, so we can use that result
+      // Actually generateVideoThumbnail returns videoData (base64) too based on our implementation
+      setIsLoading(false);
+    } catch (err) {
+      setError("Error al procesar el video: " + err.message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    processFile(e.dataTransfer.files[0]);
+  };
+
+  const handleSave = async () => {
+    if (!file) return;
+
+    setIsLoading(true);
+    try {
+      // Re-read file to get full base64 for storage if needed, 
+      // but generateVideoThumbnail gave us a base64 src via readAsDataURL.
+      // Let's re-use generateVideoThumbnail's flow or re-read if needed. 
+      // Optimally we'd store the result from processFile but let's just do it again to be safe/clean code wise
+      // or better yet, trust the browser cache of the file object? No, we need base64 string.
+      
+      // Let's modify generateVideoThumbnail to return the base64 string directly
+      // I did that in step 1: `videoData: video.src` which is the dataURL.
+      
+      const data = await generateVideoThumbnail(file);
+      
+      const result = await videoStorage.saveVideo(cameraId, {
+        base64Data: data.videoData,
+        thumbnail: data.thumbnail,
+        fileName: file.name,
+        duration: data.duration
+      });
+
+      if (result.success) {
+        toast({
+          title: "Video guardado",
+          description: "El video se ha guardado localmente para esta cámara."
+        });
+        if (onUploadSuccess) onUploadSuccess();
+        handleClose();
+      } else {
+        setError(result.error);
+      }
+    } catch (err) {
+      setError("Error al guardar: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="bg-gray-900 border-gray-800 text-white sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Cargar Video para Cámara {cameraId}</DialogTitle>
+          <DialogDescription className="text-gray-400">
+            Sube un video de prueba (max 4MB) para simular el feed de esta cámara.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {!file ? (
+            <div 
+              className={cn(
+                "border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center gap-3 transition-colors cursor-pointer",
+                isDragging ? "border-purple-500 bg-purple-500/10" : "border-gray-700 hover:border-gray-600 bg-gray-800/50",
+                error && "border-red-500/50 bg-red-900/10"
+              )}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="p-3 bg-gray-800 rounded-full">
+                <Upload className="w-6 h-6 text-purple-400" />
+              </div>
+              <div className="text-center">
+                <p className="font-medium">Arrastra tu video aquí</p>
+                <p className="text-xs text-gray-500 mt-1">o haz clic para buscar</p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <div className="flex items-start gap-4">
+                {previewThumbnail ? (
+                  <img src={previewThumbnail} alt="Preview" className="w-24 h-16 object-cover rounded bg-black" />
+                ) : (
+                  <div className="w-24 h-16 bg-gray-900 rounded flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{file.name}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  {error && (
+                    <p className="text-xs text-red-400 mt-2 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> {error}
+                    </p>
+                  )}
+                </div>
+                <Button variant="ghost" size="icon" onClick={resetState} className="text-gray-400 hover:text-white">
+                  <span className="sr-only">Remove</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x w-4 h-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(e) => processFile(e.target.files[0])}
+          />
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleSave} 
+            disabled={!file || isLoading || !!error}
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Guardar Video
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default VideoUploadModal;

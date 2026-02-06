@@ -1,0 +1,196 @@
+import React, { useState, useRef } from 'react';
+import { Mic, MicOff, ZoomIn, ZoomOut, Camera, Moon, Volume2, VolumeX } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
+
+const VideoControls = ({ videoRef }) => {
+  const [isMicOn, setIsMicOn] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [isNightVision, setIsNightVision] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const { toast } = useToast();
+
+  const handleMicToggle = () => {
+    setIsMicOn(!isMicOn);
+    toast({
+      title: isMicOn ? "Microphone Off" : "Microphone On",
+      description: "🚧 Audio recording feature isn't implemented yet—but don't worry! You can request it in your next prompt! 🚀",
+    });
+  };
+
+  const handleZoomIn = () => {
+    if (zoomLevel < 4) {
+      const newZoom = Math.min(zoomLevel + 0.5, 4);
+      setZoomLevel(newZoom);
+      if (videoRef?.current) {
+        videoRef.current.style.transform = `scale(${newZoom})`;
+      }
+      toast({
+        title: `Zoom ${newZoom}x`,
+        description: "Video zoomed in",
+      });
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (zoomLevel > 1) {
+      const newZoom = Math.max(zoomLevel - 0.5, 1);
+      setZoomLevel(newZoom);
+      if (videoRef?.current) {
+        videoRef.current.style.transform = `scale(${newZoom})`;
+      }
+      toast({
+        title: `Zoom ${newZoom}x`,
+        description: "Video zoomed out",
+      });
+    }
+  };
+
+  const handleScreenshot = () => {
+    if (!videoRef?.current) {
+      toast({
+        title: "No Video",
+        description: "Please upload a video first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `screenshot-${Date.now()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Screenshot Captured",
+        description: "Screenshot saved successfully.",
+      });
+    });
+  };
+
+  const handleNightVision = () => {
+    setIsNightVision(!isNightVision);
+    if (videoRef?.current) {
+      if (!isNightVision) {
+        videoRef.current.style.filter = 'grayscale(100%) brightness(1.3) contrast(1.2)';
+      } else {
+        videoRef.current.style.filter = 'none';
+      }
+    }
+    toast({
+      title: isNightVision ? "Night Vision Off" : "Night Vision On",
+      description: isNightVision ? "Normal vision restored" : "Night vision filter applied",
+    });
+  };
+
+  const handleMuteToggle = () => {
+    if (videoRef?.current) {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+      toast({
+        title: isMuted ? "Audio On" : "Audio Muted",
+        description: isMuted ? "Video audio unmuted" : "Video audio muted",
+      });
+    }
+  };
+
+  return (
+    <div className="w-full bg-gray-900/50 backdrop-blur-sm rounded-lg border border-gray-800 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        {/* Left Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Microphone Toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMicToggle}
+            className={`border-gray-700 hover:bg-gray-800 transition-all ${
+              isMicOn ? 'bg-red-600/20 border-red-600 text-red-400' : 'text-gray-300'
+            }`}
+          >
+            {isMicOn ? <Mic className="w-4 h-4 mr-2" /> : <MicOff className="w-4 h-4 mr-2" />}
+            {isMicOn ? 'Recording' : 'Mic Off'}
+          </Button>
+
+          {/* Audio Mute Toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMuteToggle}
+            className={`border-gray-700 hover:bg-gray-800 transition-all ${
+              isMuted ? 'bg-orange-600/20 border-orange-600 text-orange-400' : 'text-gray-300'
+            }`}
+          >
+            {isMuted ? <VolumeX className="w-4 h-4 mr-2" /> : <Volume2 className="w-4 h-4 mr-2" />}
+            {isMuted ? 'Muted' : 'Audio'}
+          </Button>
+
+          {/* Night Vision Toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleNightVision}
+            className={`border-gray-700 hover:bg-gray-800 transition-all ${
+              isNightVision ? 'bg-green-600/20 border-green-600 text-green-400' : 'text-gray-300'
+            }`}
+          >
+            <Moon className="w-4 h-4 mr-2" />
+            {isNightVision ? 'Night Vision On' : 'Night Vision'}
+          </Button>
+        </div>
+
+        {/* Right Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-2 px-3 py-1 bg-gray-800/50 rounded-md border border-gray-700">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleZoomOut}
+              disabled={zoomLevel <= 1}
+              className="h-8 w-8 p-0 text-gray-300 hover:text-white disabled:opacity-30"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+            <span className="text-sm font-medium text-purple-400 min-w-[40px] text-center">
+              {zoomLevel}x
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleZoomIn}
+              disabled={zoomLevel >= 4}
+              className="h-8 w-8 p-0 text-gray-300 hover:text-white disabled:opacity-30"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Screenshot Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleScreenshot}
+            className="border-gray-700 hover:bg-gray-800 text-gray-300"
+          >
+            <Camera className="w-4 h-4 mr-2" />
+            Screenshot
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default VideoControls;

@@ -1,0 +1,143 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Helmet } from 'react-helmet';
+import { Video, Activity, ChevronLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import VideoPlayer from '@/components/VideoPlayer';
+import VideoControls from '@/components/VideoControls';
+import MotionHistory from '@/components/MotionHistory';
+import MotionRecorder from '@/components/MotionRecorder';
+import { useCameraContext } from '@/context/CameraContext';
+
+const LivePage = () => {
+  const videoRef = useRef(null);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [videoFilename, setVideoFilename] = useState('');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  const { getSelectedCamera } = useCameraContext();
+  const selectedCamera = getSelectedCamera();
+
+  const handleVideoLoad = () => {
+    setVideoLoaded(true);
+  };
+
+  const handleMotionSaved = () => {
+    // Trigger refresh of motion history
+    setRefreshTrigger(prev => prev + 1);
+  };
+
+  // Check if video is playing
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleEnded = () => setIsPlaying(false);
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('ended', handleEnded);
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('ended', handleEnded);
+    };
+  }, [videoLoaded]);
+
+  return (
+    <>
+      <Helmet>
+        <title>{selectedCamera.name} - En Vivo - SecureCam</title>
+        <meta name="description" content={`Vista en vivo de ${selectedCamera.name}`} />
+      </Helmet>
+
+      <div className="min-h-screen bg-gray-950 pb-16">
+        <main className="container mx-auto px-4 py-6">
+          <div className="mb-6 flex items-center gap-4">
+            <Link 
+              to="/" 
+              className="p-2 rounded-lg bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                {selectedCamera.name}
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                  isPlaying 
+                    ? 'bg-red-500/20 text-red-400 border-red-500/30' 
+                    : 'bg-gray-700/50 text-gray-400 border-gray-600'
+                }`}>
+                  {isPlaying ? 'EN VIVO' : 'PAUSADO'}
+                </span>
+              </h1>
+              <p className="text-sm text-gray-400">
+                ID: CAM-{String(selectedCamera.id).padStart(3, '0')}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Left Column - Video Player & Controls */}
+            <div className="flex-1 lg:w-[65%] space-y-4">
+              {/* Video Player */}
+              <div className="rounded-xl overflow-hidden border border-gray-800 shadow-2xl shadow-black/50">
+                <VideoPlayer
+                  videoRef={videoRef}
+                  onVideoLoad={handleVideoLoad}
+                  videoFilename={videoFilename}
+                  setVideoFilename={setVideoFilename}
+                />
+              </div>
+              
+              {/* Video Controls */}
+              {videoLoaded && (
+                <VideoControls videoRef={videoRef} />
+              )}
+
+              {/* Info Card */}
+              {!videoLoaded && (
+                <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-500/20 rounded-xl p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-purple-500/10 rounded-lg">
+                      <Activity className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white mb-2">
+                        Sistema Listo
+                      </h3>
+                      <p className="text-gray-400 leading-relaxed">
+                        Carga un video para comenzar la simulación de vigilancia. El sistema detectará movimiento automáticamente y lo registrará en el historial lateral.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column - Motion History */}
+            <div className="flex-1 lg:w-[35%] lg:h-[calc(100vh-200px)] min-h-[500px]">
+              <MotionHistory 
+                refreshTrigger={refreshTrigger} 
+                cameraId={selectedCamera.id}
+              />
+            </div>
+          </div>
+        </main>
+
+        {/* Motion Recorder Component (Invisible but functional) */}
+        <MotionRecorder
+          videoRef={videoRef}
+          enabled={videoLoaded && isPlaying}
+          videoFilename={videoFilename}
+          onMotionSaved={handleMotionSaved}
+        />
+      </div>
+    </>
+  );
+};
+
+export default LivePage;

@@ -1,0 +1,127 @@
+import { useEffect, useRef, useState } from 'react';
+
+const useMotionDetector = (videoRef, options = {}) => {
+  const {
+    threshold = 0.15, // Motion detection sensitivity (0-1)
+    sampleRate = 100, // Check every 100ms
+    enabled = true
+  } = options;
+
+  const [motionLevel, setMotionLevel] = useState(0);
+  const [isMotionDetected, setIsMotionDetected] = useState(false);
+  const canvasRef = useRef(null);
+  const previousFrameRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const lastCheckTimeRef = useRef(0);
+
+  useEffect(() => {
+    if (!enabled || !videoRef?.current) {
+      return;
+    }
+
+    const video = videoRef.current;
+    
+    // Create canvas for frame analysis
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas');
+    }
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    const analyzeFrame = (timestamp) => {
+      if (!enabled || video.paused || video.ended) {
+        animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+        return;
+      }
+
+      // Throttle analysis based on sample rate
+      if (timestamp - lastCheckTimeRef.current < sampleRate) {
+        animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+        return;
+      }
+      lastCheckTimeRef.current = timestamp;
+
+      // Set canvas dimensions to match video (scaled down for performance)
+      const scale = 0.25; // Analyze at 25% resolution for performance
+      canvas.width = video.videoWidth * scale;
+      canvas.height = video.videoHeight * scale;
+
+      if (canvas.width === 0 || canvas.height === 0) {
+        animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+        return;
+      }
+
+      // Draw current frame
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      if (previousFrameRef.current) {
+        // Compare with previous frame
+        const diff = compareFrames(currentFrame.data, previousFrameRef.current.data);
+        setMotionLevel(diff);
+        setIsMotionDetected(diff > threshold);
+      }
+
+      // Store current frame for next comparison
+      previousFrameRef.current = currentFrame;
+
+      animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+    };
+
+    // Start analyzing when video is playing
+    const handlePlay = () => {
+      animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+    };
+
+    const handlePause = () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      setMotionLevel(0);
+      setIsMotionDetected(false);
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+
+    if (!video.paused) {
+      handlePlay();
+    }
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [videoRef, threshold, sampleRate, enabled]);
+
+  // Compare two frames and return motion level (0-1)
+  const compareFrames = (frame1, frame2) => {
+    let diffPixels = 0;
+    const pixelThreshold = 30; // Minimum pixel difference to count as changed
+
+    // Sample every 4th pixel for performance (RGB values)
+    for (let i = 0; i < frame1.length; i += 16) {
+      const diff = Math.abs(frame1[i] - frame2[i]) +
+                   Math.abs(frame1[i + 1] - frame2[i + 1]) +
+                   Math.abs(frame1[i + 2] - frame2[i + 2]);
+      
+      if (diff > pixelThreshold) {
+        diffPixels++;
+      }
+    }
+
+    // Return percentage of changed pixels
+    const totalSampledPixels = frame1.length / 16;
+    return Math.min(diffPixels / totalSampledPixels, 1);
+  };
+
+  return {
+    motionLevel,
+    isMotionDetected
+  };
+};
+
+export default useMotionDetector;

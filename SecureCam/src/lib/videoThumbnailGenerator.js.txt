@@ -1,0 +1,61 @@
+export const generateVideoThumbnail = (file) => {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('video/')) {
+      reject(new Error('Formato de archivo inválido. Se requiere video.'));
+      return;
+    }
+
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+
+    const fileReader = new FileReader();
+
+    fileReader.onload = (e) => {
+      video.src = e.target.result;
+    };
+
+    fileReader.onerror = () => {
+      reject(new Error('Error al leer el archivo.'));
+    };
+
+    video.onloadedmetadata = () => {
+      // Seek to 1 second or 25% of duration if shorter, to ensure we get a frame
+      const seekTime = Math.min(1, video.duration * 0.25);
+      video.currentTime = seekTime;
+    };
+
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
+        const duration = video.duration;
+        
+        // Clean up
+        URL.revokeObjectURL(video.src);
+        
+        resolve({
+          thumbnail,
+          duration,
+          fileName: file.name,
+          videoData: video.src // This is the base64/blob url
+        });
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    video.onerror = () => {
+      reject(new Error('Error al cargar el video.'));
+    };
+
+    fileReader.readAsDataURL(file);
+  });
+};

@@ -1,0 +1,145 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '@/components/ui/use-toast';
+
+const STORAGE_KEY = 'securecam_videos';
+
+export const useVideoStorage = () => {
+  const [storedVideos, setStoredVideos] = useState({});
+  const { toast } = useToast();
+
+  // Load initial state
+  useEffect(() => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (data) {
+        setStoredVideos(JSON.parse(data));
+      }
+    } catch (error) {
+      console.error('Error loading videos from storage:', error);
+      // If corrupted, reset
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  const saveVideo = useCallback(async (cameraId, videoData) => {
+    try {
+      // 1. Get current storage to ensure we have latest
+      const currentData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      
+      // 2. Create new entry
+      const newEntry = {
+        id: crypto.randomUUID(),
+        cameraId: Number(cameraId),
+        base64Data: videoData.base64Data, // Full video data
+        thumbnail: videoData.thumbnail,
+        fileName: videoData.fileName,
+        duration: videoData.duration,
+        uploadDate: new Date().toISOString(),
+        size: videoData.base64Data.length
+      };
+
+      // 3. Update object
+      const updatedData = {
+        ...currentData,
+        [cameraId]: newEntry
+      };
+
+      // 4. Try to save to localStorage
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedData));
+        setStoredVideos(updatedData);
+        return { success: true, data: newEntry };
+      } catch (e) {
+        if (e.name === 'QuotaExceededError') {
+          throw new Error('El almacenamiento local está lleno. Intenta con un video más pequeño o borra videos antiguos.');
+        }
+        throw e;
+      }
+    } catch (error) {
+      console.error('Save video error:', error);
+      return { success: false, error: error.message };
+    }
+  }, []);
+
+  const getVideoByCamera = useCallback((cameraId) => {
+    return storedVideos[cameraId] || null;
+  }, [storedVideos]);
+
+  const deleteVideo = useCallback((cameraId) => {
+    try {
+      const currentData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      if (currentData[cameraId]) {
+        delete currentData[cameraId];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
+        setStoredVideos(currentData);
+        toast({
+          title: "Video eliminado",
+          description: "El video ha sido eliminado del almacenamiento local."
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Delete error:', error);
+      return false;
+    }
+  }, [toast]);
+
+  const updateVideoMetadata = useCallback((cameraId, metadata) => {
+    try {
+      const currentData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      if (currentData[cameraId]) {
+        currentData[cameraId] = { ...currentData[cameraId], ...metadata };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
+        setStoredVideos(currentData);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Update metadata error:', error);
+      return false;
+    }
+  }, []);
+
+  const clearAllVideos = useCallback(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      setStoredVideos({});
+      toast({
+        title: "Almacenamiento limpio",
+        description: "Todos los videos han sido eliminados."
+      });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }, [toast]);
+
+  const getStorageUsage = useCallback(() => {
+    try {
+      let total = 0;
+      for (let x in localStorage) {
+        if (!localStorage.hasOwnProperty(x)) continue;
+        total += ((localStorage[x].length + x.length) * 2);
+      }
+      return {
+        used: (total / 1024 / 1024).toFixed(2), // MB
+        percentage: Math.min(100, (total / (5 * 1024 * 1024)) * 100).toFixed(1) // Assuming 5MB limit roughly
+      };
+    } catch (e) {
+      return { used: 0, percentage: 0 };
+    }
+  }, []);
+
+  return {
+    storedVideos,
+    saveVideo,
+    getVideoByCamera,
+    deleteVideo,
+    updateVideoMetadata,
+    clearAllVideos,
+    getStorageUsage
+  };
+};
+
+export default useVideoStorage;
